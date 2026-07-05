@@ -25,7 +25,7 @@
     border-radius: 12px; padding: 18px;
   }
   .card h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 14px; }
-  .row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 0.95rem; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 0.95rem; gap: 10px; }
   .row:last-child { border-bottom: none; }
   .pill { font-size: 0.78rem; padding: 3px 10px; border-radius: 99px; font-weight: 600; white-space: nowrap; }
   .pill.ok    { background: rgba(46,204,113,.12); color: var(--green); }
@@ -55,17 +55,19 @@
     <h2>Bills</h2>
     <div id="bills"><div class="empty">Loading…</div></div>
   </div>
+
   <div class="card">
-    <h2>Watchlist <span id="wl-updated" class="sub"></span></h2>
+    <h2>EMA Signals <span id="wl-updated" class="sub"></span></h2>
     <div id="watchlist"><div class="empty">Loading…</div></div>
   </div>
+
   <div class="card">
     <h2>Tasks</h2>
     <div id="tasks"><div class="empty">Loading…</div></div>
   </div>
 </div>
 
-<footer>Data lives in <code>data/*.json</code> in this repo. Watchlist refreshes each weekday via GitHub Actions.</footer>
+<footer>Dashboard reads bills/tasks locally and EMA signals from your public stock-ema-agent repo.</footer>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -92,6 +94,7 @@ function nextDue(dueDay) {
   if (d < today) d = clamp(y, m + 1);
   return d;
 }
+
 fetch("data/bills.json" + bust()).then(r => r.json()).then(({ bills }) => {
   const today = new Date(); today.setHours(0,0,0,0);
   const rows = bills.map(b => {
@@ -110,24 +113,54 @@ fetch("data/bills.json" + bust()).then(r => r.json()).then(({ bills }) => {
   }).join("") || '<div class="empty">No bills configured.</div>';
 }).catch(() => $("bills").innerHTML = '<div class="empty">Could not load bills.json</div>');
 
-/* ---- Watchlist ---- */
-fetch("data/watchlist.json" + bust()).then(r => r.json()).then(w => {
-  if (w.updated) $("wl-updated").textContent = " · " + new Date(w.updated).toLocaleDateString();
-  $("watchlist").innerHTML = (w.items || []).map(i => {
-    const bull = i.signal === "bullish";
-    const cross = i.cross && i.cross !== "none"
-      ? `<span class="pill info">${i.cross} cross</span>` : "";
-    return `<div class="row">
-      <div class="tick">
-        <span class="sym">${i.ticker}</span>
-        <span class="px">$${Number(i.price).toFixed(2)}</span>
-      </div>
-      <div style="display:flex;gap:6px">${cross}
-        <span class="pill ${bull ? "ok" : "due"}">${bull ? "▲" : "▼"} EMA${i.emaShortPeriod}/${i.emaLongPeriod}</span>
-      </div>
-    </div>`;
-  }).join("") || '<div class="empty">No data yet — the GitHub Action will populate this.</div>';
-}).catch(() => $("watchlist").innerHTML = '<div class="empty">No data yet — the GitHub Action will populate this.</div>');
+/* ---- EMA Signals from stock-ema-agent repo ---- */
+async function loadEmaSignals() {
+  const url = "https://raw.githubusercontent.com/mp82182/stock-ema-agent/main/data/latest_ema_signals.json";
+
+  try {
+    const response = await fetch(url + bust());
+    if (!response.ok) throw new Error("EMA JSON not found yet");
+
+    const data = await response.json();
+
+    if (data.updated_at) {
+      $("wl-updated").textContent = " · " + data.updated_at;
+    }
+
+    const signals = data.signals || data.items || [];
+
+    $("watchlist").innerHTML = signals.map(i => {
+      const ticker = i.ticker || i.symbol || "";
+      const price = Number(i.price || 0).toFixed(2);
+      const ema = Number(i.ema || i.ema_value || 0).toFixed(2);
+      const distance = Number(i.distance_pct || i.distance || 0).toFixed(1);
+      const zone = i.zone || i.signal || "Unknown";
+
+      let cls = "info";
+      if (zone.includes("Strong Buy") || zone.includes("Buy Zone") || zone.includes("Near Buy")) cls = "ok";
+      if (zone.includes("Extended")) cls = "warn";
+      if (zone.includes("Broken")) cls = "due";
+
+      return `<div class="row">
+        <div class="tick">
+          <span class="sym">${ticker}</span>
+          <span class="px">$${price}</span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+          <span class="sub">EMA $${ema}</span>
+          <span class="sub">${distance}%</span>
+          <span class="pill ${cls}">${zone}</span>
+        </div>
+      </div>`;
+    }).join("") || '<div class="empty">No EMA signals found yet.</div>';
+
+  } catch (error) {
+    $("watchlist").innerHTML = '<div class="empty">Could not load EMA signals yet. Make sure latest_ema_signals.json exists in stock-ema-agent/data.</div>';
+    console.error(error);
+  }
+}
+
+loadEmaSignals();
 
 /* ---- Tasks ---- */
 fetch("data/tasks.json" + bust()).then(r => r.json()).then(({ tasks }) => {
