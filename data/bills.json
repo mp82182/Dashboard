@@ -1,0 +1,10 @@
+{
+  "_help": "Edit this file to manage bills. 'dueDay' = day of month the payment is due. Labels are intentionally obfuscated since the repo is public.",
+  "bills": [
+    { "label": "Card •9697", "dueDay": 15 },
+    { "label": "Card •3095", "dueDay": 15 },
+    { "label": "Card •9126", "dueDay": 15 },
+    { "label": "Hotel card", "dueDay": 15 },
+    { "label": "Mortgage", "dueDay": 1 }
+  ]
+}

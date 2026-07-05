@@ -1,0 +1,8 @@
+{
+  "_help": "Edit this file to manage tasks. Set done to true to check items off.",
+  "tasks": [
+    { "text": "Set my real bill due dates in data/bills.json", "done": false },
+    { "text": "Adjust tickers in data/watchlist_config.json", "done": false },
+    { "text": "Verify the daily GitHub Action ran (Actions tab)", "done": false }
+  ]
+}

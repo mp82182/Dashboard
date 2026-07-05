@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1117; --card: #181b23; --border: #262a35;
+    --text: #e8eaf0; --muted: #8b90a0; --accent: #4f8cff;
+    --green: #2ecc71; --red: #ff5c5c; --amber: #ffb84d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 24px; max-width: 1100px; margin: 0 auto;
+  }
+  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 24px; flex-wrap: wrap; gap: 8px; }
+  h1 { font-size: 1.4rem; font-weight: 600; }
+  #clock { color: var(--muted); font-size: 0.9rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px;
+  }
+  .card h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 14px; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 0.95rem; }
+  .row:last-child { border-bottom: none; }
+  .pill { font-size: 0.78rem; padding: 3px 10px; border-radius: 99px; font-weight: 600; white-space: nowrap; }
+  .pill.ok    { background: rgba(46,204,113,.12); color: var(--green); }
+  .pill.warn  { background: rgba(255,184,77,.12);  color: var(--amber); }
+  .pill.due   { background: rgba(255,92,92,.15);   color: var(--red); }
+  .pill.info  { background: rgba(79,140,255,.12);  color: var(--accent); }
+  .sub { color: var(--muted); font-size: 0.8rem; }
+  .tick { display: flex; gap: 10px; align-items: baseline; }
+  .tick .sym { font-weight: 600; min-width: 52px; }
+  .tick .px  { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .task { display: flex; gap: 10px; align-items: center; }
+  .task.done { color: var(--muted); text-decoration: line-through; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+  .task.done .dot { background: var(--muted); }
+  .empty { color: var(--muted); font-size: 0.9rem; padding: 8px 0; }
+  footer { margin-top: 24px; color: var(--muted); font-size: 0.78rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Personal Dashboard</h1>
+  <div id="clock"></div>
+</header>
+
+<div class="grid">
+  <div class="card">
+    <h2>Bills</h2>
+    <div id="bills"><div class="empty">Loading…</div></div>
+  </div>
+  <div class="card">
+    <h2>Watchlist <span id="wl-updated" class="sub"></span></h2>
+    <div id="watchlist"><div class="empty">Loading…</div></div>
+  </div>
+  <div class="card">
+    <h2>Tasks</h2>
+    <div id="tasks"><div class="empty">Loading…</div></div>
+  </div>
+</div>
+
+<footer>Data lives in <code>data/*.json</code> in this repo. Watchlist refreshes each weekday via GitHub Actions.</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const bust = () => "?t=" + Date.now();
+
+function fmtDate(d) {
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/* ---- Clock ---- */
+function tickClock() {
+  $("clock").textContent = new Date().toLocaleString(undefined,
+    { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+tickClock(); setInterval(tickClock, 30000);
+
+/* ---- Bills ---- */
+function nextDue(dueDay) {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const clamp = (yy, mm) => new Date(yy, mm, Math.min(dueDay, new Date(yy, mm + 1, 0).getDate()));
+  let d = clamp(y, m);
+  const today = new Date(y, m, now.getDate());
+  if (d < today) d = clamp(y, m + 1);
+  return d;
+}
+fetch("data/bills.json" + bust()).then(r => r.json()).then(({ bills }) => {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const rows = bills.map(b => {
+    const due = nextDue(b.dueDay);
+    const days = Math.round((due - today) / 86400000);
+    return { ...b, due, days };
+  }).sort((a, b) => a.days - b.days);
+
+  $("bills").innerHTML = rows.map(b => {
+    const cls = b.days <= 3 ? "due" : b.days <= 7 ? "warn" : "ok";
+    const label = b.days === 0 ? "due today" : b.days === 1 ? "1 day" : b.days + " days";
+    return `<div class="row">
+      <div>${b.label}<div class="sub">due ${fmtDate(b.due)}</div></div>
+      <span class="pill ${cls}">${label}</span>
+    </div>`;
+  }).join("") || '<div class="empty">No bills configured.</div>';
+}).catch(() => $("bills").innerHTML = '<div class="empty">Could not load bills.json</div>');
+
+/* ---- Watchlist ---- */
+fetch("data/watchlist.json" + bust()).then(r => r.json()).then(w => {
+  if (w.updated) $("wl-updated").textContent = " · " + new Date(w.updated).toLocaleDateString();
+  $("watchlist").innerHTML = (w.items || []).map(i => {
+    const bull = i.signal === "bullish";
+    const cross = i.cross && i.cross !== "none"
+      ? `<span class="pill info">${i.cross} cross</span>` : "";
+    return `<div class="row">
+      <div class="tick">
+        <span class="sym">${i.ticker}</span>
+        <span class="px">$${Number(i.price).toFixed(2)}</span>
+      </div>
+      <div style="display:flex;gap:6px">${cross}
+        <span class="pill ${bull ? "ok" : "due"}">${bull ? "▲" : "▼"} EMA${i.emaShortPeriod}/${i.emaLongPeriod}</span>
+      </div>
+    </div>`;
+  }).join("") || '<div class="empty">No data yet — the GitHub Action will populate this.</div>';
+}).catch(() => $("watchlist").innerHTML = '<div class="empty">No data yet — the GitHub Action will populate this.</div>');
+
+/* ---- Tasks ---- */
+fetch("data/tasks.json" + bust()).then(r => r.json()).then(({ tasks }) => {
+  $("tasks").innerHTML = (tasks || []).map(t =>
+    `<div class="row"><div class="task ${t.done ? "done" : ""}"><span class="dot"></span>${t.text}</div></div>`
+  ).join("") || '<div class="empty">No tasks.</div>';
+}).catch(() => $("tasks").innerHTML = '<div class="empty">Could not load tasks.json</div>');
+</script>
+</body>
+</html>

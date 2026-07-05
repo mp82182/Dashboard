@@ -1,0 +1,6 @@
+{
+  "_help": "Edit tickers here. The GitHub Action reads this file daily and regenerates watchlist.json.",
+  "tickers": ["NVDA", "AAPL", "MSFT", "SPY"],
+  "emaShort": 20,
+  "emaLong": 50
+}
